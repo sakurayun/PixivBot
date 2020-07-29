@@ -1,22 +1,26 @@
+import asyncio
 import typing as T
 
-from mirai import *
+from graia.application import GraiaMiraiApplication, Session, Source, Friend, Group, MessageChain, FriendMessage, \
+    GroupMessage
+from graia.application.protocol.entities.event.lifecycle import ApplicationShutdowned, ApplicationLaunched
+from graia.broadcast import Broadcast
 
 from handler import *
 from pixiv import start_auto_auth, start_search_helper, start_illust_cacher, stop_illust_cacher, stop_search_helper
 from utils import settings, log, start_reply_queue, stop_reply_queue
 
-qq = settings["mirai"]["qq"]
-authKey = settings["mirai"]["auth_key"]
-host = settings["mirai"]["host"]
-port = settings["mirai"]["port"]
-locate = f"{host}:{port}/"
-if settings["mirai"]["enable_websocket"]:
-    locate = locate + "ws"
+loop = asyncio.get_event_loop()
 
-url = f"mirai://{locate}?authKey={authKey}&qq={qq}"
-log.info("Connecting " + url)
-bot = Mirai(url)
+bcc = Broadcast(loop=loop)
+session = Session(
+    host=f"""http://{settings["mirai"]["host"]}:{settings["mirai"]["port"]}""",
+    authKey=settings["mirai"]["auth_key"],
+    account=settings["mirai"]["qq"],
+    websocket=settings["mirai"]["enable_websocket"]
+)
+app = GraiaMiraiApplication(broadcast=bcc, connect_info=session)
+log.info("Connect to " + str(session))
 
 handlers = {
     "ranking":
@@ -32,40 +36,43 @@ handlers = {
 }
 
 
-async def on_receive(function_dict: dict, bot: Mirai, source: Source, subject: T.Union[Group, Friend],
+async def on_receive(function_switch: dict,
+                     app: GraiaMiraiApplication,
+                     subject: T.Union[Group, Friend],
                      message: MessageChain):
-    if function_dict["listen"] is not None and subject.id not in function_dict["listen"]:
+    if (function_switch["listen"] is not None) and (subject.id not in function_switch["listen"]):
         return
 
+    src = message.get(Source)[0]
+
     for key in handlers:
-        if function_dict[key]:
-            await handlers[key].receive(bot, source, subject, message)
+        if function_switch[key]:
+            await handlers[key].receive(app, subject, message, src)
 
 
-@bot.receiver("GroupMessage")
-async def group_receiver(bot: Mirai, source: Source, group: Group, message: MessageChain):
-    await on_receive(settings["function"]["group"], bot, source, group, message)
+@bcc.receiver(GroupMessage)
+async def group_receiver(app: GraiaMiraiApplication, message: MessageChain, sender: Group):
+    await on_receive(settings["function"]["group"], app, sender, message)
 
 
-@bot.receiver("FriendMessage")
-async def friend_receiver(bot: Mirai, source: Source, friend: Friend, message: MessageChain):
-    await on_receive(settings["function"]["friend"], bot, source, friend, message)
+@bcc.receiver(FriendMessage)
+async def friend_receiver(app: GraiaMiraiApplication, message: MessageChain, sender: Friend):
+    await on_receive(settings["function"]["friend"], app, sender, message)
 
 
-@bot.onStage("start")
-async def prepare_bot(bot: Mirai):
+@bcc.receiver(ApplicationLaunched)
+async def prepare_bot():
     start_auto_auth()
     await start_reply_queue()
     await start_search_helper()
     await start_illust_cacher()
 
 
-@bot.onStage("end")
-async def close_bot(bot: Mirai):
+@bcc.receiver(ApplicationShutdowned)
+async def shutdown_bot():
     await stop_reply_queue()
     await stop_search_helper()
     await stop_illust_cacher()
 
 
-if __name__ == "__main__":
-    bot.run()
+app.launch_blocking()

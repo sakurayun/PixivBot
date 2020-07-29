@@ -1,10 +1,11 @@
 import os
 import typing as T
 
-from mirai import *
+from graia.application import MessageChain, GraiaMiraiApplication, Group, Source, Friend
+from graia.application.protocol.entities.message.elements.internal import Plain
 
 from pixiv import get_illusts_with_cache, make_illust_filter, papi
-from utils import log, message_content, match_groups, decode_chinese_int
+from utils import log, match_groups, decode_chinese_int
 from .abstract_random_query_handler import AbstractRandomQueryHandler
 
 
@@ -37,7 +38,7 @@ class PixivRandomBookmarkQueryHandler(AbstractRandomQueryHandler):
         找出消息中所指定的数字（随机多少张书签）
         :return: 数字。若未触发则为None，若未指定数字则为1
         """
-        content = message_content(message)
+        content = message.asDisplay()
         for x in self.trigger:
             result = match_groups(x, ["$number"], content)
             if result is None:
@@ -54,16 +55,21 @@ class PixivRandomBookmarkQueryHandler(AbstractRandomQueryHandler):
 
         return None
 
-    async def generate_reply(self, bot: Mirai, source: Source, subject: T.Union[Group, Friend], message: MessageChain):
+    async def generate_reply(self, app: GraiaMiraiApplication,
+                             subject: T.Union[Group, Friend],
+                             message: MessageChain,
+                             source: Source) -> T.AsyncGenerator[MessageChain, T.Any]:
         number = self.__find_number(message)
         if number is None:
             return
 
         if number > self.limit_per_query:
-            yield [Plain(self.overlimit_message)]
+            yield MessageChain(__root__=[
+                Plain(self.overlimit_message)
+            ])
             return
-        log.info(f"{self.tag}: [{number}]")
 
+        log.info(f"{self.tag}: [{number}]")
         illusts = await self.__get_bookmarks()
         log.info(f"{self.tag}: found [{len(illusts)}] bookmarks")
         async for msg in self.random_and_generate_reply(illusts, number):

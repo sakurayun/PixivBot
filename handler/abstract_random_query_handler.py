@@ -1,21 +1,24 @@
 import asyncio
 import typing as T
 
-from mirai import *
+from graia.application import MessageChain
+from graia.application.protocol.entities.message.elements.internal import Plain
 from loguru import logger as log
+
 from handler.abstract_message_handler import AbstractMessageHandler
 from pixiv import make_illust_message, random_illust
 
 
 class AbstractRandomQueryHandler(AbstractMessageHandler):
-    async def random_and_generate_reply(self, illusts: T.Sequence[dict], number: int):
+    async def random_and_generate_reply(self, illusts: T.Sequence[dict],
+                                        number: int) -> T.AsyncGenerator[MessageChain, T.Any]:
         """
         从illusts中随机抽取number张画像，并生成Message
         :param illusts: 所有的画像
         :param number: 要随机抽取的张数
         """
         if len(illusts) == 0:
-            yield [Plain(self.not_found_message)]
+            yield MessageChain(__root__=[Plain(self.not_found_message)])
         else:
             tasks = []
             if len(illusts) < number:
@@ -35,7 +38,5 @@ class AbstractRandomQueryHandler(AbstractMessageHandler):
                     log.info(f"""{self.tag}: selected illust [{illust["id"]}]""")
                 for i in selected:
                     tasks.append(asyncio.create_task(make_illust_message(selected[i])))
-            while tasks:
-                done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-                for task in done:
-                    yield task.result()
+            for task in asyncio.as_completed(tasks):
+                yield task.result()

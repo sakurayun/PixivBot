@@ -1,10 +1,11 @@
 import re
 import typing as T
 
-from mirai import *
+from graia.application import MessageChain, GraiaMiraiApplication, Group, Source, Friend
+from graia.application.protocol.entities.message.elements.internal import Plain
 
 from pixiv import get_illusts, papi
-from utils import log, message_content
+from utils import log
 from .abstract_message_handler import AbstractMessageHandler
 
 
@@ -14,7 +15,7 @@ class PixivRankingQueryHandler(AbstractMessageHandler):
         找出消息中所指定的排行榜种类
         :return: 排行榜种类，若没有则为None
         """
-        content = message_content(message)
+        content = message.asDisplay()
         for key in self.trigger:
             for x in self.trigger[key]:
                 if x in content:
@@ -29,7 +30,7 @@ class PixivRankingQueryHandler(AbstractMessageHandler):
         找出消息中指定的排行范围
         :return: 排行范围的列表
         """
-        content = message_content(message)
+        content = message.asDisplay()
 
         regex = "[1-9][0-9]*-[1-9][0-9]*"
         res = re.search(regex, content)
@@ -39,7 +40,10 @@ class PixivRankingQueryHandler(AbstractMessageHandler):
         begin, end = res.group().split('-')
         return int(begin), int(end)
 
-    async def generate_reply(self, bot: Mirai, source: Source, subject: T.Union[Group, Friend], message: MessageChain):
+    async def generate_reply(self, app: GraiaMiraiApplication,
+                             subject: T.Union[Group, Friend],
+                             message: MessageChain,
+                             source: Source) -> T.AsyncGenerator[MessageChain, T.Any]:
         mode = self.__find_ranking_mode(message)
         if mode is None:
             return

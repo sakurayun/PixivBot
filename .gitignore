@@ -1,9 +1,7 @@
-/venv/
-settings.json
 /.idea/
-/cache/
-/__pycache__/
+/.venv/
 /.vscode/
-*.ipynb
-/.ipynb_checkpoints/
+/cache/
+__pycache__/
+settings.json
 poetry.lock

@@ -119,7 +119,7 @@ class CacheManager:
                        cache_outdated_time: T.Optional[int] = None,
                        timeout: T.Optional[int] = None):
         # log.debug(f"get {cache_file}")
-        del_if_outdated(cache_file, cache_outdated_time)
+        self.__del_if_outdated(cache_file, cache_outdated_time)
         if not cache_file.exists():
             if cache_file not in self.__waiting:
                 event = asyncio.Event()
@@ -131,7 +131,8 @@ class CacheManager:
         else:
             asyncio.create_task(self.__read_cache(fut, cache_file))
 
-    async def __on_clear(self, event: asyncio.Event,
+    @staticmethod
+    async def __on_clear(event: asyncio.Event,
                          file: Path,
                          cache_outdated_time: T.Optional[int] = None):
         # log.debug(f"clear {file}")
@@ -139,7 +140,7 @@ class CacheManager:
             if f.is_dir():
                 for c in f.iterdir():
                     work(c)
-            del_if_outdated(f, cache_outdated_time)
+            CacheManager.__del_if_outdated(f, cache_outdated_time)
 
         await launch(work, file)
         event.set()
@@ -173,7 +174,8 @@ class CacheManager:
         except Exception as e:
             fut.set_exception(e)
 
-    async def __read_cache(self, fut: asyncio.Future,
+    @staticmethod
+    async def __read_cache(fut: asyncio.Future,
                            cache_file: Path):
         try:
             async with aiofiles.open(cache_file, "rb") as f:
@@ -183,11 +185,11 @@ class CacheManager:
         except Exception as e:
             fut.set_exception(e)
 
-
-def del_if_outdated(file: Path, outdated_time: T.Optional[int]):
-    if file.exists():
-        now = time.time()
-        mtime = file.stat().st_mtime
-        if outdated_time is not None and now - mtime > outdated_time:
-            file.unlink()
-            log.info(f"deleted outdated cache {file}")
+    @staticmethod
+    def __del_if_outdated(file: Path, outdated_time: T.Optional[int]):
+        if file.exists():
+            now = time.time()
+            mtime = file.stat().st_mtime
+            if outdated_time is not None and now - mtime > outdated_time:
+                file.unlink()
+                log.info(f"deleted outdated cache {file}")

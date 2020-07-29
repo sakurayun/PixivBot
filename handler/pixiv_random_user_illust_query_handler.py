@@ -1,10 +1,11 @@
 import os
 import typing as T
 
-from mirai import *
+from graia.application import MessageChain, GraiaMiraiApplication, Group, Source, Friend
+from graia.application.protocol.entities.message.elements.internal import Plain
 
 from pixiv import get_illusts_with_cache, make_illust_filter, papi
-from utils import log, message_content, match_groups, decode_chinese_int, launch, reply
+from utils import log, match_groups, decode_chinese_int, launch
 from .abstract_random_query_handler import AbstractRandomQueryHandler
 
 
@@ -14,7 +15,7 @@ class PixivRandomUserIllustQueryHandler(AbstractRandomQueryHandler):
         找出消息中的搜索关键字
         :return: 搜索关键字，若未触发则为None
         """
-        content = message_content(message)
+        content = message.asDisplay()
         for x in self.trigger:
             result = match_groups(x, ["$illustrator", "$number"], content)
             if result is None:
@@ -31,7 +32,8 @@ class PixivRandomUserIllustQueryHandler(AbstractRandomQueryHandler):
 
         return None
 
-    async def __get_user_id(self, keyword: str) -> T.Optional[int]:
+    @staticmethod
+    async def __get_user_id(keyword: str) -> T.Optional[int]:
         """
         获取指定关键词的画师id和名称
         :param keyword: 搜索关键词
@@ -66,7 +68,10 @@ class PixivRandomUserIllustQueryHandler(AbstractRandomQueryHandler):
                                                search_page_limit=self.search_page_limit)
         return illusts
 
-    async def generate_reply(self, bot: Mirai, source: Source, subject: T.Union[Group, Friend], message: MessageChain):
+    async def generate_reply(self, app: GraiaMiraiApplication,
+                             subject: T.Union[Group, Friend],
+                             message: MessageChain,
+                             source: Source) -> T.AsyncGenerator[MessageChain, T.Any]:
         attrs = self.__find_attrs(message)
         if attrs is None:
             return
@@ -79,7 +84,9 @@ class PixivRandomUserIllustQueryHandler(AbstractRandomQueryHandler):
 
         user_id = await self.__get_user_id(keyword)
         if user_id is None:
-            await reply(bot, source, subject, [Plain(self.not_found_message)])
+            yield MessageChain(__root__=[
+                Plain(self.not_found_message)
+            ])
             return
 
         log.info(f"{self.tag}: [{keyword}] user id [{user_id}]")

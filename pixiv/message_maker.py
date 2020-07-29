@@ -1,8 +1,8 @@
 import asyncio
 import typing as T
 
-from mirai import Plain, Image
-from mirai.event.message.base import BaseMessageComponent
+from graia.application import MessageChain
+from graia.application.protocol.entities.message.elements.internal import Plain, Image
 
 from utils import settings
 from .illust_cacher import cache_illust
@@ -15,7 +15,7 @@ download_timeout_message: str = settings["illust"]["download_timeout_message"]
 reply_pattern: str = settings["illust"]["reply_pattern"]
 
 
-async def make_illust_message(illust: dict) -> T.Sequence[BaseMessageComponent]:
+async def make_illust_message(illust: dict) -> MessageChain:
     """
     将给定illust按照模板转换为message
     :param illust: 给定illust
@@ -31,24 +31,24 @@ async def make_illust_message(illust: dict) -> T.Sequence[BaseMessageComponent]:
         if has_tag(illust, tag):
             illegal_tags.append(tag)
 
-    message = []
+    msg_root = []
 
     if len(illegal_tags) > 0:
         block_message_formatted = block_message.replace("%tag", ' '.join(illegal_tags))
         if block_mode == "escape_img":
-            message.append(Plain(string + '\n' + block_message_formatted))
+            msg_root.append(Plain(string + '\n' + block_message_formatted))
         elif block_mode == "fully_block":
-            message.append(Plain(block_message_formatted))
+            msg_root.append(Plain(block_message_formatted))
         else:
             raise ValueError("illegal block_mode value: " + block_mode)
     else:
-        message.append(Plain(string))
+        msg_root.append(Plain(string))
         try:
             b = await cache_illust(illust)
-            message.append(Image.fromBytes(b))
+            msg_root.append(Image.fromUnsafeBytes(b))
         except asyncio.TimeoutError:
-            message.append(Plain(download_timeout_message))
+            msg_root.append(Plain(download_timeout_message))
         except Exception as e:
-            message.append(Plain(f"{type(e)} {str(e)}"))
+            msg_root.append(Plain(f"{type(e)} {str(e)}"))
 
-    return message
+    return MessageChain(__root__=msg_root)
